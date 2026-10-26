@@ -1,0 +1,2308 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ZOMBIE OUTBREAK · 3D 殭屍射擊 v2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    user-select: none;
+    touch-action: none;
+    -webkit-touch-callout: none;
+  }
+  canvas { display: block; touch-action: none; }
+
+  /* ===================== 全屏按鈕（右上角） ===================== */
+  #btnFullscreen {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top, 16px));
+    right: max(16px, env(safe-area-inset-right, 16px));
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 11px;
+    background: rgba(10, 16, 26, .62);
+    border: 1.5px solid rgba(140, 190, 255, .42);
+    color: #cfe4ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 30;
+    pointer-events: auto;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transition: background .12s, transform .1s, border-color .12s;
+    font-family: inherit;
+  }
+  #btnFullscreen:hover {
+    background: rgba(40, 70, 110, .82);
+    border-color: rgba(160, 210, 255, .72);
+  }
+  #btnFullscreen:active { transform: scale(0.9); }
+  #btnFullscreen svg { width: 21px; height: 21px; }
+
+  #ui { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+
+  #crosshair {
+    position: absolute; left: 50%; top: 50%;
+    width: 22px; height: 22px;
+    transform: translate(-50%, -50%);
+    transition: transform .08s;
+  }
+  #crosshair::before, #crosshair::after {
+    content: ''; position: absolute;
+    background: rgba(255, 255, 255, .9);
+    box-shadow: 0 0 4px rgba(0, 0, 0, .95);
+  }
+  #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+  #crosshair::after  { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+  #crosshair.hit { transform: translate(-50%, -50%) scale(1.7); }
+  #crosshair.hit::before, #crosshair.hit::after { background: #ff4444; }
+
+  #topinfo {
+    position: absolute; top: 20px; left: 50%;
+    transform: translateX(-50%);
+    display: flex; gap: 20px;
+    color: #cfd8e3;
+    font-size: 14px; font-weight: 600;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 8px rgba(0,0,0,.95);
+    flex-wrap: wrap; justify-content: center;
+  }
+  #topinfo span { padding: 6px 15px; background: rgba(10, 16, 26, .6); border-radius: 20px; border: 1px solid rgba(120, 160, 220, .3); }
+
+  #bossBar {
+    position: absolute; top: 74px; left: 50%;
+    transform: translateX(-50%);
+    width: min(340px, 70vw);
+    text-align: center;
+  }
+  #bossLabel {
+    color: #ff5555; font-weight: 900; font-size: 14px;
+    letter-spacing: 5px; text-shadow: 0 2px 10px #000;
+    margin-bottom: 4px;
+  }
+  #bossBarOuter {
+    height: 12px; background: rgba(20, 5, 5, .85);
+    border: 1px solid rgba(255, 80, 80, .55);
+    border-radius: 6px; overflow: hidden;
+  }
+  #bossBarFill {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #ff2222, #ff8822);
+    transition: width .12s;
+  }
+
+  #healthWrap {
+    position: absolute; left: 30px; bottom: 30px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  #healthBar {
+    width: 200px; height: 14px;
+    background: rgba(10, 16, 26, .75);
+    border: 1px solid rgba(120, 160, 220, .3);
+    border-radius: 8px; overflow: hidden;
+  }
+  #healthFill {
+    height: 100%; width: 100%;
+    background: linear-gradient(90deg, #ff3b3b, #ff7a45);
+    border-radius: 8px;
+    transition: width .18s ease-out;
+  }
+  #healthNum {
+    color: #ff8a8a; font-weight: 700; font-size: 17px;
+    text-shadow: 0 2px 8px rgba(0,0,0,.95);
+    min-width: 46px;
+  }
+
+  #ammoBox {
+    position: absolute; right: 34px; bottom: 26px;
+    text-align: right;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(0,0,0,.95);
+  }
+  #ammoNum { font-size: 44px; font-weight: 800; letter-spacing: -1px; }
+  #ammoNum.low { color: #ff5555; }
+  #ammoTotal { font-size: 19px; color: #8fa4bd; font-weight: 600; }
+  #weaponName {
+    font-size: 12px; color: #9fd4ff; letter-spacing: 2px;
+    margin-bottom: 2px; font-weight: 700;
+  }
+  #reloadTip {
+    font-size: 13px; color: #ffcc55; margin-top: 2px;
+    opacity: 0; transition: opacity .2s;
+  }
+  #reloadTip.on { opacity: 1; }
+
+  #damageFlash {
+    position: absolute; inset: 0;
+    background: radial-gradient(circle, transparent 35%, rgba(200, 20, 20, .9) 100%);
+    opacity: 0; transition: opacity .25s;
+  }
+
+  #waveBanner {
+    position: absolute; top: 36%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ffdb70;
+    font-size: clamp(28px, 6vw, 44px);
+    font-weight: 800;
+    letter-spacing: 4px;
+    text-shadow: 0 0 30px rgba(255, 160, 0, .95), 0 4px 20px rgba(0,0,0,.95);
+    opacity: 0; transition: opacity .4s;
+    white-space: nowrap;
+  }
+  #waveBanner.on { opacity: 1; }
+  #waveBanner.boss {
+    color: #ff4444;
+    text-shadow: 0 0 30px rgba(255, 30, 30, .95), 0 4px 20px rgba(0,0,0,.95);
+  }
+
+  #desktopHint {
+    position: absolute; bottom: 22px; left: 50%;
+    transform: translateX(-50%);
+    color: rgba(160, 190, 220, .55);
+    font-size: 12px; letter-spacing: 1px;
+    text-shadow: 0 1px 4px #000;
+    pointer-events: none;
+  }
+
+  /* ===================== 手機控制 ===================== */
+  #mobileControls {
+    display: none;
+    position: fixed; inset: 0;
+    z-index: 6;
+    pointer-events: none;
+  }
+  @media (pointer: coarse), (max-width: 900px) {
+    #mobileControls { display: block; }
+    #desktopHint { display: none; }
+  }
+
+  #dpad {
+    position: absolute;
+    left: max(18px, env(safe-area-inset-left, 18px));
+    bottom: max(18px, env(safe-area-inset-bottom, 18px));
+    display: grid;
+    grid-template-columns: repeat(3, 58px);
+    grid-template-rows: repeat(3, 58px);
+    gap: 5px;
+    pointer-events: auto;
+  }
+  .dbtn {
+    background: rgba(30, 50, 80, .55);
+    border: 2px solid rgba(140, 190, 255, .45);
+    border-radius: 13px;
+    color: #cfe4ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    transition: background .08s, transform .08s;
+  }
+  .dbtn svg { width: 26px; height: 26px; }
+  .dbtn.pressed {
+    background: rgba(90, 140, 220, .85);
+    transform: scale(0.93);
+  }
+  .dbtn[data-dir="up"]    { grid-column: 2; grid-row: 1; }
+  .dbtn[data-dir="left"]  { grid-column: 1; grid-row: 2; }
+  .dbtn[data-dir="right"] { grid-column: 3; grid-row: 2; }
+  .dbtn[data-dir="down"]  { grid-column: 2; grid-row: 3; }
+
+  #actionBtns {
+    position: absolute;
+    right: max(18px, env(safe-area-inset-right, 18px));
+    bottom: max(18px, env(safe-area-inset-bottom, 18px));
+    display: grid;
+    grid-template-columns: repeat(2, 72px);
+    grid-template-rows: repeat(2, 72px);
+    gap: 10px;
+    pointer-events: auto;
+  }
+  .abtn {
+    background: rgba(30, 50, 80, .58);
+    border: 2px solid rgba(140, 190, 255, .48);
+    border-radius: 50%;
+    color: #cfe4ff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    cursor: pointer;
+    user-select: none;
+    touch-action: none;
+    transition: background .08s, transform .08s;
+  }
+  .abtn svg.abtn-icon {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+  .abtn span {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    line-height: 1;
+  }
+  .abtn.pressed { transform: scale(0.9); }
+
+  #btnShoot  { background: rgba(160, 50, 50, .65); border-color: rgba(255, 130, 130, .6); }
+  #btnShoot.pressed  { background: rgba(230, 70, 70, .92); }
+  #btnJump   { background: rgba(50, 120, 70, .6);  border-color: rgba(130, 255, 160, .55); }
+  #btnJump.pressed   { background: rgba(70, 180, 100, .88); }
+  #btnWeapon { background: rgba(120, 80, 40, .6);  border-color: rgba(255, 200, 120, .55); }
+  #btnWeapon.pressed { background: rgba(180, 130, 60, .88); }
+  #btnDodge  { background: rgba(80, 50, 130, .6);  border-color: rgba(190, 150, 255, .55); }
+  #btnDodge.pressed  { background: rgba(140, 90, 220, .88); }
+  .abtn.cooldown { opacity: .35; }
+
+  .overlay {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: radial-gradient(circle at 50% 45%, rgba(20, 32, 50, .94), rgba(3, 6, 12, .98));
+    color: #e6edf7;
+    z-index: 20;
+    text-align: center;
+    padding: 24px;
+    overflow-y: auto;
+  }
+  .overlay.hidden { display: none; }
+
+  .overlay h1 {
+    font-size: clamp(34px, 8vw, 62px);
+    font-weight: 900;
+    letter-spacing: 5px;
+    background: linear-gradient(180deg, #b9ff9a, #2e9e3a);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 60px rgba(80, 220, 90, .35);
+    margin-bottom: 6px;
+  }
+  .overlay h2 {
+    font-size: clamp(20px, 5vw, 26px);
+    font-weight: 700;
+    color: #ff6b6b; letter-spacing: 4px;
+    margin-bottom: 22px;
+  }
+  .sub {
+    color: #8fa4bd; font-size: 14px; letter-spacing: 2px;
+    margin-bottom: 26px;
+  }
+
+  .keys {
+    display: grid;
+    grid-template-columns: auto auto;
+    gap: 9px 22px;
+    margin-bottom: 30px;
+    font-size: 14px;
+  }
+  .keys b {
+    display: inline-block;
+    background: rgba(60, 90, 130, .35);
+    border: 1px solid rgba(120, 170, 230, .35);
+    border-radius: 7px;
+    padding: 4px 12px;
+    color: #9fd4ff;
+    font-weight: 700;
+    min-width: 64px;
+    text-align: center;
+  }
+  .keys span { color: #b9c7d6; text-align: left; align-self: center; }
+
+  .btn {
+    pointer-events: auto;
+    cursor: pointer;
+    padding: 14px 54px;
+    font-size: 20px; font-weight: 800;
+    letter-spacing: 3px;
+    color: #06140a;
+    background: linear-gradient(180deg, #8dff7a, #2fa83c);
+    border: none; border-radius: 40px;
+    box-shadow: 0 8px 28px rgba(60, 200, 80, .4);
+    transition: transform .15s, box-shadow .15s;
+    font-family: inherit;
+  }
+  .btn:hover { transform: translateY(-3px); box-shadow: 0 12px 36px rgba(60, 200, 80, .6); }
+  .btn:active { transform: translateY(0); }
+
+  .stats {
+    display: flex; gap: clamp(20px, 6vw, 60px); margin-bottom: 32px;
+  }
+  .stat { text-align: center; }
+  .stat .v { font-size: 36px; font-weight: 800; color: #ffd93d; }
+  .stat .l { font-size: 12px; color: #7f93aa; letter-spacing: 2px; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<button id="btnFullscreen" title="切換全螢幕">
+  <svg class="fs-enter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4"/>
+  </svg>
+  <svg class="fs-exit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+    <path d="M8 3v3a2 2 0 0 1-2 2H3M21 8h-3a2 2 0 0 1-2-2V3M3 16h3a2 2 0 0 1 2 2v3M16 21v-3a2 2 0 0 1 2-2h3"/>
+  </svg>
+</button>
+
+<div id="ui">
+  <div id="topinfo">
+    <span id="waveLabel">第 1 波</span>
+    <span id="remainLabel">剩餘 0</span>
+    <span id="killLabel">擊殺 0</span>
+  </div>
+
+  <div id="bossBar" style="display:none;">
+    <div id="bossLabel">BOSS</div>
+    <div id="bossBarOuter"><div id="bossBarFill"></div></div>
+  </div>
+
+  <div id="crosshair"></div>
+  <div id="waveBanner"></div>
+  <div id="damageFlash"></div>
+
+  <div id="healthWrap">
+    <div id="healthBar"><div id="healthFill"></div></div>
+    <div id="healthNum">100</div>
+  </div>
+
+  <div id="ammoBox">
+    <div id="weaponName">手槍</div>
+    <div>
+      <span id="ammoNum">12</span>
+      <span id="ammoTotal">/ 12</span>
+    </div>
+    <div id="reloadTip">按 R 換彈</div>
+  </div>
+
+  <div id="desktopHint">空白鍵跳躍 · Q 切換武器 · Shift 閃避</div>
+</div>
+
+<div id="mobileControls">
+  <div id="dpad">
+    <button class="dbtn" data-dir="up" aria-label="上">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19V5M5 12l7-7 7 7"/>
+      </svg>
+    </button>
+    <button class="dbtn" data-dir="left" aria-label="左">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 12H5M12 5l-7 7 7 7"/>
+      </svg>
+    </button>
+    <button class="dbtn" data-dir="right" aria-label="右">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+      </svg>
+    </button>
+    <button class="dbtn" data-dir="down" aria-label="下">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14M5 12l7 7 7-7"/>
+      </svg>
+    </button>
+  </div>
+
+  <div id="actionBtns">
+    <button class="abtn" id="btnShoot" aria-label="攻擊">
+      <svg class="abtn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/>
+        <line x1="13" y1="19" x2="19" y2="13"/>
+        <line x1="16" y1="16" x2="20" y2="20"/>
+        <line x1="19" y1="21" x2="21" y2="19"/>
+      </svg>
+      <span>攻擊</span>
+    </button>
+
+    <button class="abtn" id="btnJump" aria-label="跳躍">
+      <svg class="abtn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 19V5M5 12l7-7 7 7"/>
+      </svg>
+      <span>跳躍</span>
+    </button>
+
+    <button class="abtn" id="btnWeapon" aria-label="切換武器">
+      <svg class="abtn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 1l4 4-4 4"/>
+        <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+        <path d="M7 23l-4-4 4-4"/>
+        <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+      </svg>
+      <span>切換</span>
+    </button>
+
+    <button class="abtn" id="btnDodge" aria-label="閃避">
+      <svg class="abtn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+      </svg>
+      <span>閃避</span>
+    </button>
+  </div>
+</div>
+
+<div class="overlay" id="startScreen">
+  <h1>ZOMBIE OUTBREAK</h1>
+  <div class="sub">3D 生存射擊 · 撐過每一波</div>
+
+  <div class="keys">
+    <b>W A S D</b><span>移動</span>
+    <b>滑鼠</b><span>轉動視角</span>
+    <b>左鍵</b><span>射擊 / 揮刀</span>
+    <b>空白鍵</b><span>跳躍</span>
+    <b>Q</b><span>切換武器</span>
+    <b>Shift</b><span>快速閃避</span>
+    <b>R</b><span>換彈</span>
+  </div>
+
+  <button class="btn" id="startBtn">開 始 遊 戲</button>
+  <div style="color:#5f7a99;margin-top:18px;font-size:12px;">每 3 波出現 BOSS · 爆頭一擊必殺</div>
+</div>
+
+<div class="overlay hidden" id="pauseScreen">
+  <h2>暫 停</h2>
+  <div class="sub">點擊畫面繼續戰鬥</div>
+</div>
+
+<div class="overlay hidden" id="endScreen">
+  <h1 style="background:linear-gradient(180deg,#ff9a9a,#c02626);-webkit-background-clip:text;background-clip:text;">你 被 咬 了</h1>
+  <div class="stats">
+    <div class="stat"><div class="v" id="endWave">0</div><div class="l">存活波次</div></div>
+    <div class="stat"><div class="v" id="endKill">0</div><div class="l">擊殺數</div></div>
+    <div class="stat"><div class="v" id="endScore">0</div><div class="l">總分</div></div>
+  </div>
+  <button class="btn" id="restartBtn">再 來 一 次</button>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const ARENA         = 26;
+const PLAYER_RADIUS = 0.45;
+const PLAYER_HEIGHT = 1.7;
+const MOVE_SPEED    = 5.4;
+const PLAYER_GRAV   = 30;
+const PLAYER_JUMP_V = 8.6;
+
+const ZOMBIE_ATK_RANGE = 1.4;
+const ZOMBIE_ATK_DMG   = 9;
+
+const MAG_SIZE    = 12;
+const RELOAD_TIME = 1.55;
+const FIRE_INTERVAL = 0.105;
+
+const DODGE_SPEED = 17;
+const DODGE_TIME  = 0.2;
+const DODGE_CD    = 1.5;
+
+const KNIFE_RANGE    = 2.9;
+const KNIFE_DAMAGE   = 3;
+const KNIFE_COOLDOWN = 0.42;
+const KNIFE_ANIM     = 0.30;
+
+const GUN_BASE_Y = -0.19;
+const GUN_BASE_Z = -0.42;
+
+/* =========================================================
+   全屏切換
+========================================================= */
+const btnFullscreen = document.getElementById('btnFullscreen');
+const fsEnterIcon = btnFullscreen.querySelector('.fs-enter');
+const fsExitIcon  = btnFullscreen.querySelector('.fs-exit');
+
+function isFullscreen() {
+  return !!(document.fullscreenElement ||
+            document.webkitFullscreenElement ||
+            document.mozFullScreenElement ||
+            document.msFullscreenElement);
+}
+
+function updateFullscreenIcon() {
+  if (isFullscreen()) {
+    fsEnterIcon.style.display = 'none';
+    fsExitIcon.style.display = 'block';
+  } else {
+    fsEnterIcon.style.display = 'block';
+    fsExitIcon.style.display = 'none';
+  }
+}
+
+function toggleFullscreen() {
+  try {
+    if (!isFullscreen()) {
+      const el = document.documentElement;
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else if (el.mozRequestFullScreen) {
+        el.mozRequestFullScreen();
+      } else if (el.msRequestFullscreen) {
+        el.msRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen();
+      }
+    }
+  } catch (e) {
+    console.warn('全屏切換失敗', e);
+  }
+}
+
+btnFullscreen.addEventListener('click', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  toggleFullscreen();
+});
+
+['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'].forEach((ev) => {
+  document.addEventListener(ev, () => {
+    updateFullscreenIcon();
+    setTimeout(() => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    }, 80);
+  });
+});
+
+/* =========================================================
+   渲染器 / 場景 / 相機
+========================================================= */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a2432);
+scene.fog = new THREE.FogExp2(0x1a2432, 0.011);
+
+const camera = new THREE.PerspectiveCamera(76, innerWidth / innerHeight, 0.05, 300);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* =========================================================
+   精簡版光源
+========================================================= */
+scene.add(new THREE.AmbientLight(0xb8cce0, 2.1));
+scene.add(new THREE.HemisphereLight(0xddeeff, 0x445566, 1.3));
+
+const moon = new THREE.DirectionalLight(0xffffff, 1.8);
+moon.position.set(22, 42, 16);
+moon.castShadow = true;
+moon.shadow.mapSize.set(1024, 1024);
+moon.shadow.camera.left   = -ARENA - 6;
+moon.shadow.camera.right  =  ARENA + 6;
+moon.shadow.camera.top    =  ARENA + 6;
+moon.shadow.camera.bottom = -ARENA - 6;
+moon.shadow.camera.near = 1;
+moon.shadow.camera.far  = 130;
+moon.shadow.bias = -0.0008;
+scene.add(moon);
+
+const fillLight = new THREE.DirectionalLight(0xaaccff, 0.7);
+fillLight.position.set(-18, 20, -22);
+scene.add(fillLight);
+
+const lightOrb = new THREE.Mesh(
+  new THREE.SphereGeometry(0.55, 20, 20),
+  new THREE.MeshBasicMaterial({ color: 0xffe9b0 })
+);
+lightOrb.position.set(0, 16, 0);
+scene.add(lightOrb);
+
+const lightHalo = new THREE.Mesh(
+  new THREE.SphereGeometry(1.6, 20, 20),
+  new THREE.MeshBasicMaterial({ color: 0xffd090, transparent: true, opacity: 0.28 })
+);
+lightHalo.position.copy(lightOrb.position);
+scene.add(lightHalo);
+
+/* =========================================================
+   地面
+========================================================= */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(160, 160),
+  new THREE.MeshLambertMaterial({ color: 0x38445c })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const grid = new THREE.GridHelper(160, 80, 0x5a7090, 0x2a3548);
+grid.position.y = 0.012;
+grid.material.opacity = 0.55;
+grid.material.transparent = true;
+scene.add(grid);
+
+/* =========================================================
+   障礙物
+========================================================= */
+const obstacles = [];
+const obstacleMeshes = [];
+
+function addObstacle(x, z, w, h, d, color) {
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color: color || 0x5a6a88 })
+  );
+  mesh.position.set(x, h / 2, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  obstacles.push({ x, z, w, d, h });
+  obstacleMeshes.push(mesh);
+}
+
+addObstacle(-14, -14, 3.2, 2.6, 3.2, 0x506080);
+addObstacle( 14, -14, 3.2, 2.6, 3.2, 0x506080);
+addObstacle(-14,  14, 3.2, 2.6, 3.2, 0x506080);
+addObstacle( 14,  14, 3.2, 2.6, 3.2, 0x506080);
+addObstacle(  0, -19, 8.5, 1.4, 1.2, 0x6a5444);
+addObstacle(  0,  19, 8.5, 1.4, 1.2, 0x6a5444);
+addObstacle(-19,   0, 1.2, 1.4, 8.5, 0x6a5444);
+addObstacle( 19,   0, 1.2, 1.4, 8.5, 0x6a5444);
+addObstacle(-8,  -7, 1.6, 1.1, 1.6, 0x5e6e8e);
+addObstacle( 8,   7, 1.6, 1.1, 1.6, 0x5e6e8e);
+addObstacle(-9,   9, 1.3, 0.9, 1.3, 0x5e6e8e);
+addObstacle( 9,  -9, 1.3, 0.9, 1.3, 0x5e6e8e);
+
+/* =========================================================
+   燈柱（純視覺）
+========================================================= */
+function addLampPost(x, z) {
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.08, 0.1, 4.2, 8),
+    new THREE.MeshLambertMaterial({ color: 0x2a3548 })
+  );
+  pole.position.set(x, 2.1, z);
+  pole.castShadow = true;
+  scene.add(pole);
+
+  const lamp = new THREE.Mesh(
+    new THREE.SphereGeometry(0.26, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffdd99 })
+  );
+  lamp.position.set(x, 4.3, z);
+  scene.add(lamp);
+
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.72, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffcc77, transparent: true, opacity: 0.32 })
+  );
+  glow.position.copy(lamp.position);
+  scene.add(glow);
+}
+
+addLampPost(-21, -21);
+addLampPost( 21, -21);
+addLampPost(-21,  21);
+addLampPost( 21,  21);
+addLampPost(  0, -22);
+addLampPost(  0,  22);
+
+/* =========================================================
+   武器：手槍
+========================================================= */
+const gunGroup = new THREE.Group();
+
+const metalMat  = new THREE.MeshLambertMaterial({ color: 0x2e323c });
+const darkMat   = new THREE.MeshLambertMaterial({ color: 0x1a1d24 });
+const accentMat = new THREE.MeshLambertMaterial({ color: 0x6a7488 });
+
+const gunBody = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.15, 0.52), metalMat);
+gunBody.position.set(0, 0, -0.18);
+
+const gunBarrel = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.075, 0.42), darkMat);
+gunBarrel.position.set(0, 0.025, -0.56);
+
+const gunGrip = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.22, 0.13), darkMat);
+gunGrip.position.set(0, -0.16, -0.02);
+gunGrip.rotation.x = 0.18;
+
+const gunMag = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.18, 0.09), accentMat);
+gunMag.position.set(0, -0.14, -0.16);
+
+const gunSight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 0.03), accentMat);
+gunSight.position.set(0, 0.1, -0.42);
+
+const muzzleFlash = new THREE.Mesh(
+  new THREE.SphereGeometry(0.1, 8, 8),
+  new THREE.MeshBasicMaterial({ color: 0xffe98a, transparent: true, opacity: 0.95 })
+);
+muzzleFlash.position.set(0, 0.025, -0.8);
+muzzleFlash.visible = false;
+
+gunGroup.add(gunBody, gunBarrel, gunGrip, gunMag, gunSight, muzzleFlash);
+gunGroup.position.set(0.23, GUN_BASE_Y, GUN_BASE_Z);
+gunGroup.rotation.y = -0.045;
+camera.add(gunGroup);
+
+/* =========================================================
+   武器：長刀
+========================================================= */
+const knifeGroup = new THREE.Group();
+
+const handleMat = new THREE.MeshLambertMaterial({ color: 0x4a2c1a });
+const guardMat  = new THREE.MeshLambertMaterial({ color: 0x9a9a9a });
+const bladeMat  = new THREE.MeshLambertMaterial({ color: 0xe8f2ff });
+const handMat   = new THREE.MeshLambertMaterial({ color: 0xffd9a0 });
+
+const kHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.22, 8), handleMat);
+kHandle.position.set(0, 0, 0);
+
+const kPommel = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), guardMat);
+kPommel.position.set(0, -0.13, 0);
+
+const kGuard = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.06), guardMat);
+kGuard.position.set(0, 0.13, 0);
+
+const kBlade = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.6, 0.024), bladeMat);
+kBlade.position.set(0, 0.13 + 0.30, 0);
+
+const kRidge = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.56, 0.028), accentMat);
+kRidge.position.set(0, 0.13 + 0.28, 0);
+
+const kTip = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 4), bladeMat);
+kTip.position.set(0, 0.13 + 0.6 + 0.07, 0);
+
+const handR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.115, 0.14), handMat);
+handR.position.set(0, -0.055, 0);
+
+const handL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.115, 0.14), handMat);
+handL.position.set(0, 0.055, 0);
+
+knifeGroup.add(kHandle, kPommel, kGuard, kBlade, kRidge, kTip, handR, handL);
+
+const KNIFE_IDLE_POS = { x: 0.26, y: -0.42, z: -0.52 };
+const KNIFE_IDLE_ROT = { x: -0.22, y: 0.10, z: 0.08 };
+
+const KNIFE_DOWN_POS = { x: 0.22, y: -0.32, z: -0.62 };
+const KNIFE_DOWN_ROT = { x: -2.20, y: 0.10, z: 0.08 };
+
+knifeGroup.position.set(KNIFE_IDLE_POS.x, KNIFE_IDLE_POS.y, KNIFE_IDLE_POS.z);
+knifeGroup.rotation.set(KNIFE_IDLE_ROT.x, KNIFE_IDLE_ROT.y, KNIFE_IDLE_ROT.z);
+knifeGroup.visible = false;
+camera.add(knifeGroup);
+
+function lerp3(a, b, t) {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    z: a.z + (b.z - a.z) * t,
+  };
+}
+
+function updateKnifePose(swing) {
+  swing = swing < 0 ? 0 : swing > 1 ? 1 : swing;
+
+  let t;
+
+  if (swing < 0.45) {
+    const p = swing / 0.45;
+    t = p * p;
+  } else {
+    const p = (swing - 0.45) / 0.55;
+    const s = p * p * (3 - 2 * p);
+    t = 1 - s;
+  }
+
+  const pos = lerp3(KNIFE_IDLE_POS, KNIFE_DOWN_POS, t);
+  const rot = lerp3(KNIFE_IDLE_ROT, KNIFE_DOWN_ROT, t);
+
+  knifeGroup.position.set(pos.x, pos.y, pos.z);
+  knifeGroup.rotation.set(rot.x, rot.y, rot.z);
+}
+
+/* =========================================================
+   音效
+========================================================= */
+let actx = null;
+function ensureAudio() {
+  if (!actx) {
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+  }
+  if (actx && actx.state === 'suspended') actx.resume();
+}
+
+function noiseBuffer(dur) {
+  const sr = actx.sampleRate;
+  const n = Math.floor(sr * dur);
+  const buf = actx.createBuffer(1, n, sr);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  return buf;
+}
+
+function sfxShoot() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuffer(0.09);
+  const bp = actx.createBiquadFilter();
+  bp.type = 'lowpass';
+  bp.frequency.setValueAtTime(3200, t);
+  bp.frequency.exponentialRampToValueAtTime(420, t + 0.08);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.26, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.1);
+  src.connect(bp); bp.connect(g); g.connect(actx.destination);
+  src.start(t);
+
+  const osc = actx.createOscillator();
+  const og = actx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(180, t);
+  osc.frequency.exponentialRampToValueAtTime(42, t + 0.11);
+  og.gain.setValueAtTime(0.24, t);
+  og.gain.exponentialRampToValueAtTime(0.0008, t + 0.13);
+  osc.connect(og); og.connect(actx.destination);
+  osc.start(t); osc.stop(t + 0.15);
+}
+
+function sfxHit() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const osc = actx.createOscillator();
+  const g = actx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(760, t);
+  osc.frequency.exponentialRampToValueAtTime(320, t + 0.05);
+  g.gain.setValueAtTime(0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.07);
+  osc.connect(g); g.connect(actx.destination);
+  osc.start(t); osc.stop(t + 0.08);
+}
+
+function sfxZombieDie() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const osc = actx.createOscillator();
+  const g = actx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(220, t);
+  osc.frequency.exponentialRampToValueAtTime(52, t + 0.42);
+  g.gain.setValueAtTime(0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.45);
+  osc.connect(g); g.connect(actx.destination);
+  osc.start(t); osc.stop(t + 0.46);
+}
+
+function sfxHurt() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuffer(0.2);
+  const lp = actx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 520;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.2, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.22);
+  src.connect(lp); lp.connect(g); g.connect(actx.destination);
+  src.start(t);
+}
+
+function makeMetalClick(t, freq, dur, vol) {
+  if (!actx) return;
+
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuffer(dur);
+  const bp = actx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = freq;
+  bp.Q.value = 3.0;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp); bp.connect(g); g.connect(actx.destination);
+  src.start(t);
+
+  const osc = actx.createOscillator();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(freq * 1.6, t);
+  osc.frequency.exponentialRampToValueAtTime(freq * 0.8, t + dur * 0.7);
+  const og = actx.createGain();
+  og.gain.setValueAtTime(vol * 0.35, t);
+  og.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  osc.connect(og); og.connect(actx.destination);
+  osc.start(t); osc.stop(t + dur + 0.02);
+}
+
+function sfxReload() {
+  if (!actx) return;
+  const t0 = actx.currentTime;
+
+  makeMetalClick(t0 + 0.06, 1100, 0.06, 0.16);
+  makeMetalClick(t0 + 0.55, 800,  0.055, 0.18);
+  makeMetalClick(t0 + 0.72, 1400, 0.06,  0.22);
+
+  const slideT   = t0 + 1.15;
+  const slideDur = 0.15;
+  const slideSrc = actx.createBufferSource();
+  slideSrc.buffer = noiseBuffer(slideDur);
+  const slideBp = actx.createBiquadFilter();
+  slideBp.type = 'bandpass';
+  slideBp.frequency.setValueAtTime(2500, slideT);
+  slideBp.frequency.exponentialRampToValueAtTime(5500, slideT + slideDur);
+  slideBp.Q.value = 2;
+  const slideG = actx.createGain();
+  slideG.gain.setValueAtTime(0.0001, slideT);
+  slideG.gain.linearRampToValueAtTime(0.09, slideT + 0.02);
+  slideG.gain.exponentialRampToValueAtTime(0.0001, slideT + slideDur);
+  slideSrc.connect(slideBp); slideBp.connect(slideG); slideG.connect(actx.destination);
+  slideSrc.start(slideT);
+
+  makeMetalClick(t0 + 1.35, 1700, 0.07, 0.22);
+}
+
+function sfxJump() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const osc = actx.createOscillator();
+  const g = actx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(300, t);
+  osc.frequency.exponentialRampToValueAtTime(560, t + 0.12);
+  g.gain.setValueAtTime(0.07, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.14);
+  osc.connect(g); g.connect(actx.destination);
+  osc.start(t); osc.stop(t + 0.16);
+}
+
+function sfxLand() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuffer(0.09);
+  const lp = actx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 320;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.11);
+  src.connect(lp); lp.connect(g); g.connect(actx.destination);
+  src.start(t);
+}
+
+function sfxDodge() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuffer(0.18);
+  const bp = actx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(400, t);
+  bp.frequency.exponentialRampToValueAtTime(2400, t + 0.15);
+  bp.Q.value = 1.5;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.13, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.18);
+  src.connect(bp); bp.connect(g); g.connect(actx.destination);
+  src.start(t);
+}
+
+function sfxKnife() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const src = actx.createBufferSource();
+  src.buffer = noiseBuffer(0.14);
+  const hp = actx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.setValueAtTime(2000, t);
+  hp.frequency.exponentialRampToValueAtTime(6000, t + 0.1);
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.14);
+  src.connect(hp); hp.connect(g); g.connect(actx.destination);
+  src.start(t);
+}
+
+function sfxSwitch() {
+  if (!actx) return;
+  const t = actx.currentTime;
+  const osc = actx.createOscillator();
+  const g = actx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(420, t);
+  osc.frequency.exponentialRampToValueAtTime(680, t + 0.1);
+  g.gain.setValueAtTime(0.07, t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + 0.12);
+  osc.connect(g); g.connect(actx.destination);
+  osc.start(t); osc.stop(t + 0.14);
+}
+
+/* =========================================================
+   遊戲狀態
+========================================================= */
+const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+const player = {
+  x: 0, z: 0, y: 0, vy: 0,
+  hp: 100,
+  yaw: 0, pitch: 0, recoil: 0,
+  onGround: true,
+  weapon: 'pistol',
+  dodging: 0,
+  dodgeDirX: 0, dodgeDirZ: 0,
+  dodgeCd: 0,
+  knifeCd: 0,
+  attacking: 0,
+  invuln: 0,
+};
+
+let state = 'menu';
+let ammo = MAG_SIZE;
+let reloading = false;
+let reloadTimer = 0;
+let fireCooldown = 0;
+let firing = false;
+let locked = false;
+let jumpBuffer = 0;
+let muzzleFlashTimer = 0;
+
+let wave = 0;
+let zombiesToSpawn = 0;
+let spawnTimer = 0;
+let waveActive = false;
+let waveBreakTimer = 0;
+let bossSpawnTimer = -1;
+let kills = 0;
+let score = 0;
+
+let zombies = [];
+let particles = [];
+let currentBoss = null;
+
+let walkBob = 0;
+
+const el = {
+  crosshair:   document.getElementById('crosshair'),
+  waveLabel:   document.getElementById('waveLabel'),
+  remainLabel: document.getElementById('remainLabel'),
+  killLabel:   document.getElementById('killLabel'),
+  healthFill:  document.getElementById('healthFill'),
+  healthNum:   document.getElementById('healthNum'),
+  ammoBox:     document.getElementById('ammoBox'),
+  ammoNum:     document.getElementById('ammoNum'),
+  ammoTotal:   document.getElementById('ammoTotal'),
+  weaponName:  document.getElementById('weaponName'),
+  reloadTip:   document.getElementById('reloadTip'),
+  damageFlash: document.getElementById('damageFlash'),
+  waveBanner:  document.getElementById('waveBanner'),
+  bossBar:     document.getElementById('bossBar'),
+  bossFill:    document.getElementById('bossBarFill'),
+  startScreen: document.getElementById('startScreen'),
+  pauseScreen: document.getElementById('pauseScreen'),
+  endScreen:   document.getElementById('endScreen'),
+  endWave:     document.getElementById('endWave'),
+  endKill:     document.getElementById('endKill'),
+  endScore:    document.getElementById('endScore'),
+  btnDodge:    document.getElementById('btnDodge'),
+};
+
+/* =========================================================
+   殭屍
+========================================================= */
+function createZombie(px, pz, waveNum, isBoss) {
+  const group = new THREE.Group();
+  group.position.set(px, 0, pz);
+
+  const skinColor  = isBoss ? 0x8a2a2a : (0x3f7a45 + Math.floor(Math.random() * 0x001500));
+  const clothColor = isBoss ? 0x6a1a1a : (0x3b4452 + Math.floor(Math.random() * 0x000f10));
+  const pantsColor = isBoss ? 0x3a1010 : 0x2a3040;
+
+  const skinMat  = new THREE.MeshLambertMaterial({ color: skinColor });
+  const clothMat = new THREE.MeshLambertMaterial({ color: clothColor });
+  const pantsMat = new THREE.MeshLambertMaterial({ color: pantsColor });
+
+  const mats = [skinMat, clothMat, pantsMat];
+
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.86, 0.34), clothMat);
+  torso.position.y = 1.06;
+  torso.castShadow = true;
+
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skinMat);
+  head.position.y = 1.72;
+  head.castShadow = true;
+
+  const eyeMat = new THREE.MeshBasicMaterial({ color: isBoss ? 0xff6622 : 0xff3333 });
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.03), eyeMat);
+  eyeL.position.set(-0.1, 1.76, 0.21);
+  const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.03), eyeMat);
+  eyeR.position.set(0.1, 1.76, 0.21);
+
+  const legGeo = new THREE.BoxGeometry(0.2, 0.64, 0.2);
+  legGeo.translate(0, -0.32, 0);
+  const legL = new THREE.Mesh(legGeo, pantsMat);
+  legL.position.set(-0.16, 0.64, 0);
+  legL.castShadow = true;
+  const legR = new THREE.Mesh(legGeo.clone(), pantsMat);
+  legR.position.set(0.16, 0.64, 0);
+  legR.castShadow = true;
+
+  const armGeo = new THREE.BoxGeometry(0.15, 0.15, 0.62);
+  armGeo.translate(0, 0, 0.31);
+  const armL = new THREE.Mesh(armGeo, skinMat);
+  armL.position.set(-0.38, 1.36, 0.05);
+  armL.castShadow = true;
+  const armR = new THREE.Mesh(armGeo.clone(), skinMat);
+  armR.position.set(0.38, 1.36, 0.05);
+  armR.castShadow = true;
+
+  group.add(torso, head, eyeL, eyeR, legL, legR, armL, armR);
+
+  if (isBoss) {
+    group.scale.setScalar(1.9);
+    const hornMat = new THREE.MeshLambertMaterial({ color: 0x2a0a0a });
+    const hornGeo = new THREE.ConeGeometry(0.09, 0.32, 6);
+    const hornL = new THREE.Mesh(hornGeo, hornMat);
+    hornL.position.set(-0.15, 1.98, 0);
+    hornL.rotation.z = 0.25;
+    const hornR = new THREE.Mesh(hornGeo, hornMat);
+    hornR.position.set(0.15, 1.98, 0);
+    hornR.rotation.z = -0.25;
+    group.add(hornL, hornR);
+  }
+
+  scene.add(group);
+
+  const maxHp = isBoss ? (30 + waveNum * 3) : 3;
+
+  const z = {
+    group, isBoss,
+    hp: maxHp,
+    maxHp,
+    alive: true,
+    speed: isBoss ? (1.0 + waveNum * 0.05) : (1.25 + waveNum * 0.075 + Math.random() * 0.35),
+    atkCd: 0.6 + Math.random() * 0.5,
+    walkPhase: Math.random() * Math.PI * 2,
+    dying: 0,
+    hitFlash: 0,
+    mats,
+    parts: { torso, head, legL, legR, armL, armR },
+    hitMeshes: [],
+    radius: isBoss ? 0.9 : 0.55,
+    // ★ 新增：卡牆時沿牆繞行的狀態
+    avoidDir: 0,
+    avoidTimer: 0,
+  };
+
+  const mark = (m, part) => {
+    m.userData.zombie = z;
+    m.userData.part = part;
+    z.hitMeshes.push(m);
+  };
+  mark(torso, 'body');
+  mark(head, 'head');
+  mark(legL, 'body');
+  mark(legR, 'body');
+  mark(armL, 'body');
+  mark(armR, 'body');
+
+  return z;
+}
+
+function spawnZombie() {
+  let px = 0, pz = 0, tries = 0;
+  const spawnRadius = 0.6;
+  do {
+    const a = Math.random() * Math.PI * 2;
+    const r = ARENA - 1.5 - Math.random() * 5;
+    px = Math.cos(a) * r;
+    pz = Math.sin(a) * r;
+    tries++;
+  } while (
+    tries < 80 && (
+      Math.hypot(px - player.x, pz - player.z) < 13 ||
+      zombieBlocked(px, pz, spawnRadius)
+    )
+  );
+
+  const z = createZombie(px, pz, wave, false);
+  zombies.push(z);
+  spawnParticles(new THREE.Vector3(px, 1.0, pz), 0x66ff88, 6, 2.4);
+}
+
+function spawnBoss() {
+  let px = 0, pz = 0, tries = 0;
+  const spawnRadius = 0.95;
+  do {
+    const a = Math.random() * Math.PI * 2;
+    const r = ARENA - 3 - Math.random() * 4;
+    px = Math.cos(a) * r;
+    pz = Math.sin(a) * r;
+    tries++;
+  } while (
+    tries < 80 && (
+      Math.hypot(px - player.x, pz - player.z) < 14 ||
+      zombieBlocked(px, pz, spawnRadius)
+    )
+  );
+
+  const z = createZombie(px, pz, wave, true);
+  zombies.push(z);
+  currentBoss = z;
+  showBanner('⚠ BOSS 出現 ⚠', 2400, true);
+  spawnParticles(new THREE.Vector3(px, 1.4, pz), 0xff4444, 24, 5);
+}
+
+function killZombie(z) {
+  z.alive = false;
+  z.dying = 0.001;
+
+  if (z.isBoss) {
+    kills++;
+    score += 1500;
+    sfxZombieDie();
+    spawnParticles(
+      new THREE.Vector3(z.group.position.x, 1.8, z.group.position.z),
+      0xff6633, 40, 7
+    );
+    if (currentBoss === z) currentBoss = null;
+  } else {
+    kills++;
+    score += 100;
+    sfxZombieDie();
+    spawnParticles(
+      new THREE.Vector3(z.group.position.x, 1.2, z.group.position.z),
+      0x9be86a, 12, 4
+    );
+  }
+  updateHUD();
+}
+
+/* =========================================================
+   粒子
+========================================================= */
+const particleGeoCache = new THREE.BoxGeometry(0.07, 0.07, 0.07);
+
+function spawnParticles(pos, color, count, speed) {
+  for (let i = 0; i < count; i++) {
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const m = new THREE.Mesh(particleGeoCache, mat);
+    m.position.copy(pos);
+    m.position.x += (Math.random() - 0.5) * 0.4;
+    m.position.z += (Math.random() - 0.5) * 0.4;
+    scene.add(m);
+    particles.push({
+      mesh: m, mat,
+      vx: (Math.random() - 0.5) * speed,
+      vy: Math.random() * speed * 0.85 + 0.6,
+      vz: (Math.random() - 0.5) * speed,
+      life: 0.75 + Math.random() * 0.35,
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    p.vy -= 15 * dt;
+    p.mesh.position.x += p.vx * dt;
+    p.mesh.position.y += p.vy * dt;
+    p.mesh.position.z += p.vz * dt;
+    if (p.mesh.position.y < 0.04) {
+      p.mesh.position.y = 0.04;
+      p.vy *= -0.35;
+      p.vx *= 0.65;
+      p.vz *= 0.65;
+    }
+    p.mat.opacity = Math.max(0, p.life * 1.6);
+    p.mat.transparent = true;
+
+    if (p.life <= 0) {
+      scene.remove(p.mesh);
+      p.mat.dispose();
+      particles.splice(i, 1);
+    }
+  }
+}
+
+/* =========================================================
+   碰撞：玩家用
+========================================================= */
+function blocked(x, z) {
+  const r = PLAYER_RADIUS;
+  if (Math.abs(x) > ARENA - r || Math.abs(z) > ARENA - r) return true;
+  for (let i = 0; i < obstacles.length; i++) {
+    const o = obstacles[i];
+    if (x > o.x - o.w / 2 - r && x < o.x + o.w / 2 + r &&
+        z > o.z - o.d / 2 - r && z < o.z + o.d / 2 + r) return true;
+  }
+  return false;
+}
+
+/* =========================================================
+   ★ 新增：殭屍碰撞檢測（含場地邊界 + 所有障礙物）
+========================================================= */
+function zombieBlocked(x, z, radius) {
+  if (Math.abs(x) > ARENA - radius || Math.abs(z) > ARENA - radius) return true;
+  for (let i = 0; i < obstacles.length; i++) {
+    const o = obstacles[i];
+    if (x > o.x - o.w / 2 - radius && x < o.x + o.w / 2 + radius &&
+        z > o.z - o.d / 2 - radius && z < o.z + o.d / 2 + radius) return true;
+  }
+  return false;
+}
+
+/* =========================================================
+   ★ 新增：兩點間是否有障礙物阻擋（用於攻擊視線判定）
+========================================================= */
+function hasClearLine(ax, az, bx, bz) {
+  const steps = 8;
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const px = ax + (bx - ax) * t;
+    const pz = az + (bz - az) * t;
+    for (let j = 0; j < obstacles.length; j++) {
+      const o = obstacles[j];
+      if (px > o.x - o.w / 2 && px < o.x + o.w / 2 &&
+          pz > o.z - o.d / 2 && pz < o.z + o.d / 2) return false;
+    }
+  }
+  return true;
+}
+
+/* =========================================================
+   輸入：鍵盤
+========================================================= */
+const keys = { w: false, a: false, s: false, d: false };
+
+function triggerJump() {
+  if (state !== 'playing') return;
+  jumpBuffer = 0.16;
+}
+
+function toggleWeapon() {
+  if (state !== 'playing' || reloading) return;
+  player.weapon = player.weapon === 'pistol' ? 'knife' : 'pistol';
+  player.attacking = 0;
+  gunGroup.visible   = player.weapon === 'pistol';
+  knifeGroup.visible = player.weapon === 'knife';
+  el.weaponName.textContent = player.weapon === 'pistol' ? '手槍' : '長刀';
+  if (el.ammoBox) el.ammoBox.style.opacity = player.weapon === 'pistol' ? '1' : '0.35';
+  sfxSwitch();
+  updateHUD();
+}
+
+function triggerDodge() {
+  if (state !== 'playing') return;
+  if (player.dodgeCd > 0 || player.dodging > 0) return;
+
+  player.dodging = DODGE_TIME;
+  player.dodgeCd = DODGE_CD;
+
+  let ix = 0, iz = 0;
+  if (keys.w) iz += 1;
+  if (keys.s) iz -= 1;
+  if (keys.a) ix -= 1;
+  if (keys.d) ix += 1;
+  if (ix === 0 && iz === 0) iz = 1;
+
+  const len = Math.hypot(ix, iz);
+  ix /= len; iz /= len;
+
+  const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+  const fx = -sin, fz = -cos;
+  const rx =  cos, rz = -sin;
+
+  player.dodgeDirX = fx * iz + rx * ix;
+  player.dodgeDirZ = fz * iz + rz * ix;
+
+  sfxDodge();
+}
+
+addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd') {
+    keys[k] = true;
+    e.preventDefault();
+  }
+
+  if (k === 'r' && state === 'playing' && !e.repeat) {
+    if (player.weapon === 'pistol') startReload();
+  }
+
+  if (k === ' ' && !e.repeat) {
+    if (state === 'menu' || state === 'dead') {
+      startGame();
+    } else if (state === 'paused') {
+      resumeFromPause();
+    } else if (state === 'playing') {
+      triggerJump();
+    }
+    e.preventDefault();
+  }
+
+  if ((k === 'q' || k === '1' || k === '2') && !e.repeat) {
+    toggleWeapon();
+  }
+
+  if (k === 'shift' && !e.repeat) {
+    triggerDodge();
+  }
+});
+
+addEventListener('keyup', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'w' || k === 'a' || k === 's' || k === 'd') keys[k] = false;
+});
+
+addEventListener('blur', () => {
+  keys.w = keys.a = keys.s = keys.d = false;
+  firing = false;
+  clearMobileKeys();
+});
+
+/* =========================================================
+   輸入：滑鼠 / 觸控視角
+========================================================= */
+let touchLookId = null;
+let lookStartX = 0, lookStartY = 0;
+
+document.addEventListener('mousemove', (e) => {
+  if (!locked || state !== 'playing') return;
+  player.yaw   -= e.movementX * 0.0022;
+  player.pitch -= e.movementY * 0.0022;
+  const lim = Math.PI / 2 - 0.06;
+  player.pitch = Math.max(-lim, Math.min(lim, player.pitch));
+});
+
+renderer.domElement.addEventListener('mousedown', (e) => {
+  if (e.button === 0) {
+    ensureAudio();
+    if (state === 'playing') {
+      if (!isTouchDevice && !locked) {
+        requestLock();
+      } else {
+        firing = true;
+        primaryAction();
+      }
+    }
+  }
+});
+
+addEventListener('mouseup', (e) => {
+  if (e.button === 0) firing = false;
+});
+
+document.addEventListener('pointerlockchange', () => {
+  locked = document.pointerLockElement === renderer.domElement;
+  if (!locked && state === 'playing') {
+    state = 'paused';
+    firing = false;
+    el.pauseScreen.classList.remove('hidden');
+  }
+});
+
+function requestLock() {
+  if (isTouchDevice) return;
+  if (renderer.domElement.requestPointerLock) {
+    try { renderer.domElement.requestPointerLock(); } catch (e) { /* 忽略 */ }
+  }
+}
+
+renderer.domElement.addEventListener('touchstart', (e) => {
+  for (const t of e.changedTouches) {
+    if (touchLookId === null) {
+      touchLookId = t.identifier;
+      lookStartX = t.clientX;
+      lookStartY = t.clientY;
+      break;
+    }
+  }
+}, { passive: true });
+
+renderer.domElement.addEventListener('touchmove', (e) => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchLookId) {
+      const dx = t.clientX - lookStartX;
+      const dy = t.clientY - lookStartY;
+      player.yaw   -= dx * 0.005;
+      player.pitch -= dy * 0.005;
+      const lim = Math.PI / 2 - 0.06;
+      player.pitch = Math.max(-lim, Math.min(lim, player.pitch));
+      lookStartX = t.clientX;
+      lookStartY = t.clientY;
+    }
+  }
+  e.preventDefault();
+}, { passive: false });
+
+renderer.domElement.addEventListener('touchend', (e) => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchLookId) touchLookId = null;
+  }
+}, { passive: true });
+
+/* =========================================================
+   輸入：手機控制按鈕
+========================================================= */
+function bindHold(buttonId, onDown, onUp) {
+  const btn = document.getElementById(buttonId);
+  if (!btn) return;
+
+  const down = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ensureAudio();
+    btn.classList.add('pressed');
+    onDown();
+  };
+  const up = (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    btn.classList.remove('pressed');
+    if (onUp) onUp();
+  };
+
+  btn.addEventListener('touchstart', down, { passive: false });
+  btn.addEventListener('touchend', up, { passive: false });
+  btn.addEventListener('touchcancel', up, { passive: false });
+  btn.addEventListener('mousedown', down);
+  btn.addEventListener('mouseup', up);
+  btn.addEventListener('mouseleave', () => { btn.classList.remove('pressed'); if (onUp) onUp(); });
+}
+
+document.querySelectorAll('.dbtn').forEach((btn) => {
+  const dir = btn.dataset.dir;
+  const key = (dir === 'up') ? 'w' : (dir === 'down') ? 's' : (dir === 'left') ? 'a' : 'd';
+
+  const down = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ensureAudio();
+    keys[key] = true;
+    btn.classList.add('pressed');
+  };
+  const up = (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    keys[key] = false;
+    btn.classList.remove('pressed');
+  };
+
+  btn.addEventListener('touchstart', down, { passive: false });
+  btn.addEventListener('touchend', up, { passive: false });
+  btn.addEventListener('touchcancel', up, { passive: false });
+  btn.addEventListener('mousedown', down);
+  btn.addEventListener('mouseup', up);
+  btn.addEventListener('mouseleave', () => { keys[key] = false; btn.classList.remove('pressed'); });
+});
+
+bindHold('btnShoot',
+  () => {
+    if (state === 'playing') {
+      firing = true;
+      primaryAction();
+    }
+  },
+  () => { firing = false; }
+);
+
+bindHold('btnJump', () => triggerJump(), null);
+bindHold('btnWeapon', () => toggleWeapon(), null);
+bindHold('btnDodge', () => triggerDodge(), null);
+
+function clearMobileKeys() {
+  keys.w = keys.a = keys.s = keys.d = false;
+  document.querySelectorAll('.dbtn, .abtn').forEach(b => b.classList.remove('pressed'));
+}
+
+/* =========================================================
+   主要動作
+========================================================= */
+function primaryAction() {
+  if (state !== 'playing') return;
+  if (player.dodging > 0) return;
+
+  if (player.weapon === 'pistol') {
+    if (!reloading) shoot();
+  } else {
+    knifeAttack();
+  }
+}
+
+/* =========================================================
+   換彈
+========================================================= */
+function startReload() {
+  if (reloading || ammo === MAG_SIZE || player.weapon !== 'pistol') return;
+  reloading = true;
+  reloadTimer = RELOAD_TIME;
+  sfxReload();
+  el.reloadTip.classList.add('on');
+}
+
+/* =========================================================
+   射擊
+========================================================= */
+const raycaster = new THREE.Raycaster();
+raycaster.far = 120;
+const centerNDC = new THREE.Vector2(0, 0);
+
+function shoot() {
+  if (reloading || fireCooldown > 0) return;
+  if (ammo <= 0) { startReload(); return; }
+
+  ammo--;
+  fireCooldown = FIRE_INTERVAL;
+  player.recoil += 0.021;
+
+  muzzleFlash.visible = true;
+  muzzleFlashTimer = 0.045;
+  muzzleFlash.rotation.z = Math.random() * Math.PI;
+
+  sfxShoot();
+  updateHUD();
+
+  raycaster.setFromCamera(centerNDC, camera);
+
+  const targets = [];
+  for (let i = 0; i < zombies.length; i++) {
+    if (zombies[i].alive) targets.push(...zombies[i].hitMeshes);
+  }
+  for (let i = 0; i < obstacleMeshes.length; i++) targets.push(obstacleMeshes[i]);
+
+  const hits = raycaster.intersectObjects(targets, false);
+
+  if (hits.length > 0) {
+    const hit = hits[0];
+    const z = hit.object.userData.zombie;
+
+    if (z && z.alive) {
+      const isHead = hit.object.userData.part === 'head';
+      z.hp -= isHead ? 3 : 1;
+      z.hitFlash = 0.1;
+      z.group.position.x += (hit.point.x - z.group.position.x) * 0.035;
+      z.group.position.z += (hit.point.z - z.group.position.z) * 0.035;
+
+      spawnParticles(hit.point, 0x66ff88, isHead ? 10 : 5, 3.2);
+      flashCrosshair();
+      sfxHit();
+
+      if (z.hp <= 0) killZombie(z);
+      else if (isHead) score += 25;
+    } else {
+      spawnParticles(hit.point, 0xffcc55, 5, 3);
+    }
+  }
+}
+
+/* =========================================================
+   長刀攻擊
+========================================================= */
+function knifeAttack() {
+  if (player.knifeCd > 0) return;
+
+  player.knifeCd = KNIFE_COOLDOWN;
+  player.attacking = KNIFE_ANIM;
+  sfxKnife();
+
+  const facingX = -Math.sin(player.yaw);
+  const facingZ = -Math.cos(player.yaw);
+
+  let hitAnything = false;
+
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    const z = zombies[i];
+    if (!z.alive) continue;
+
+    const dx = z.group.position.x - player.x;
+    const dz = z.group.position.z - player.z;
+    const dist = Math.hypot(dx, dz);
+    const reach = KNIFE_RANGE + (z.isBoss ? 0.7 : 0);
+
+    if (dist > reach) continue;
+
+    const dot = dist > 0.001 ? ((dx / dist) * facingX + (dz / dist) * facingZ) : 1;
+    if (dot < 0.35) continue;
+
+    // 近戰也檢查視線，避免隔牆砍
+    if (!hasClearLine(player.x, player.z, z.group.position.x, z.group.position.z)) continue;
+
+    z.hp -= KNIFE_DAMAGE;
+    z.hitFlash = 0.12;
+    hitAnything = true;
+    spawnParticles(
+      new THREE.Vector3(z.group.position.x, 1.0, z.group.position.z),
+      0x9be86a, 8, 3.5
+    );
+
+    if (z.hp <= 0) killZombie(z);
+  }
+
+  if (hitAnything) {
+    sfxHit();
+    flashCrosshair();
+  }
+}
+
+/* =========================================================
+   玩家受傷 / HUD
+========================================================= */
+function damagePlayer(amount) {
+  if (state !== 'playing') return;
+  if (player.dodging > 0) return;
+
+  player.hp -= amount;
+  player.invuln = 0.5;
+  sfxHurt();
+
+  el.damageFlash.style.opacity = '0.9';
+  setTimeout(() => { el.damageFlash.style.opacity = '0'; }, 110);
+
+  if (player.hp <= 0) {
+    player.hp = 0;
+    updateHUD();
+    gameOver();
+    return;
+  }
+  updateHUD();
+}
+
+function updateHUD() {
+  el.healthFill.style.width = Math.max(0, player.hp) + '%';
+  el.healthNum.textContent = Math.max(0, Math.round(player.hp));
+  el.ammoNum.textContent = ammo;
+  el.ammoTotal.textContent = '/ ' + MAG_SIZE;
+  el.ammoNum.classList.toggle('low', ammo <= 3);
+  el.waveLabel.textContent = '第 ' + Math.max(1, wave) + ' 波';
+  el.killLabel.textContent = '擊殺 ' + kills;
+
+  let alive = 0;
+  for (let i = 0; i < zombies.length; i++) if (zombies[i].alive) alive++;
+  el.remainLabel.textContent = '剩餘 ' + (alive + zombiesToSpawn);
+}
+
+let bannerTimer = null;
+function showBanner(text, duration, isBoss) {
+  el.waveBanner.textContent = text;
+  el.waveBanner.classList.toggle('boss', !!isBoss);
+  el.waveBanner.classList.add('on');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => el.waveBanner.classList.remove('on'), duration || 1600);
+}
+
+function flashCrosshair() {
+  el.crosshair.classList.add('hit');
+  clearTimeout(flashCrosshair._t);
+  flashCrosshair._t = setTimeout(() => el.crosshair.classList.remove('hit'), 90);
+}
+
+/* =========================================================
+   波次控制
+========================================================= */
+function startWave(n) {
+  wave = n;
+  zombiesToSpawn = 4 + n * 2;
+  waveActive = true;
+  spawnTimer = 0.4;
+
+  const isBossWave = (n % 3 === 0);
+  if (isBossWave) {
+    bossSpawnTimer = 1.4;
+    showBanner('第 ' + n + ' 波 · BOSS', 2000, true);
+  } else {
+    showBanner('第 ' + n + ' 波', 1500, false);
+  }
+
+  updateHUD();
+}
+
+/* =========================================================
+   遊戲流程
+========================================================= */
+function resetGame() {
+  for (const z of zombies) {
+    scene.remove(z.group);
+    z.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  }
+  zombies = [];
+  currentBoss = null;
+
+  for (const p of particles) {
+    scene.remove(p.mesh);
+    p.mat.dispose();
+  }
+  particles = [];
+
+  player.x = 0; player.z = 0; player.y = 0; player.vy = 0;
+  player.yaw = 0; player.pitch = 0; player.recoil = 0;
+  player.hp = 100;
+  player.onGround = true;
+  player.weapon = 'pistol';
+  player.dodging = 0;
+  player.dodgeCd = 0;
+  player.knifeCd = 0;
+  player.attacking = 0;
+  player.invuln = 0;
+
+  gunGroup.visible = true;
+  knifeGroup.visible = false;
+  gunGroup.position.set(0.23, GUN_BASE_Y, GUN_BASE_Z);
+  gunGroup.rotation.set(0, -0.045, 0);
+
+  knifeGroup.position.set(KNIFE_IDLE_POS.x, KNIFE_IDLE_POS.y, KNIFE_IDLE_POS.z);
+  knifeGroup.rotation.set(KNIFE_IDLE_ROT.x, KNIFE_IDLE_ROT.y, KNIFE_IDLE_ROT.z);
+
+  el.weaponName.textContent = '手槍';
+  if (el.ammoBox) el.ammoBox.style.opacity = '1';
+
+  ammo = MAG_SIZE;
+  reloading = false;
+  reloadTimer = 0;
+  fireCooldown = 0;
+  firing = false;
+  jumpBuffer = 0;
+
+  wave = 0;
+  zombiesToSpawn = 0;
+  waveActive = false;
+  waveBreakTimer = 0;
+  bossSpawnTimer = -1;
+  kills = 0;
+  score = 0;
+
+  muzzleFlash.visible = false;
+  el.bossBar.style.display = 'none';
+  el.reloadTip.classList.remove('on');
+
+  updateHUD();
+}
+
+function startGame() {
+  try {
+    ensureAudio();
+    resetGame();
+    el.startScreen.classList.add('hidden');
+    el.endScreen.classList.add('hidden');
+    el.pauseScreen.classList.add('hidden');
+    state = 'playing';
+    requestLock();
+    startWave(1);
+  } catch (err) {
+    console.error('[startGame 錯誤]', err);
+  }
+}
+
+function resumeFromPause() {
+  el.pauseScreen.classList.add('hidden');
+  state = 'playing';
+  requestLock();
+}
+
+function gameOver() {
+  state = 'dead';
+  firing = false;
+  if (document.pointerLockElement) document.exitPointerLock();
+
+  el.endWave.textContent = Math.max(1, wave);
+  el.endKill.textContent = kills;
+  el.endScore.textContent = score;
+  el.endScreen.classList.remove('hidden');
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+el.pauseScreen.addEventListener('click', () => {
+  ensureAudio();
+  resumeFromPause();
+});
+
+el.pauseScreen.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  ensureAudio();
+  resumeFromPause();
+}, { passive: false });
+
+renderer.domElement.addEventListener('click', () => {
+  if (state === 'playing' && !locked && !isTouchDevice) requestLock();
+});
+
+/* =========================================================
+   主更新
+========================================================= */
+const clock = new THREE.Clock();
+
+function update(dt) {
+  if (fireCooldown > 0) fireCooldown -= dt;
+  if (player.knifeCd > 0) player.knifeCd -= dt;
+  if (player.invuln > 0) player.invuln -= dt;
+
+  if (muzzleFlashTimer > 0) {
+    muzzleFlashTimer -= dt;
+    if (muzzleFlashTimer <= 0) muzzleFlash.visible = false;
+  }
+
+  if (player.dodgeCd > 0) player.dodgeCd -= dt;
+  if (el.btnDodge) {
+    el.btnDodge.classList.toggle('cooldown', player.dodgeCd > 0);
+  }
+
+  player.recoil *= Math.pow(0.0001, dt);
+  if (player.recoil < 0.0005) player.recoil = 0;
+
+  if (player.weapon === 'pistol') {
+    if (reloading) {
+      const t = 1 - reloadTimer / RELOAD_TIME;
+      const curve = Math.sin(t * Math.PI);
+      gunGroup.position.y = GUN_BASE_Y - curve * 0.42;
+      gunGroup.position.z = GUN_BASE_Z + curve * 0.12;
+      gunGroup.rotation.x = curve * 0.85;
+      gunGroup.rotation.z = curve * 0.5;
+    } else {
+      const k = Math.min(1, dt * 14);
+      gunGroup.position.y += (GUN_BASE_Y - gunGroup.position.y) * k;
+      gunGroup.position.z += (GUN_BASE_Z - gunGroup.position.z) * k;
+      gunGroup.rotation.x += (0 - gunGroup.rotation.x) * k;
+      gunGroup.rotation.z += (0 - gunGroup.rotation.z) * k;
+    }
+  }
+
+  if (player.weapon === 'knife') {
+    if (player.attacking > 0) {
+      player.attacking -= dt;
+      const elapsed = KNIFE_ANIM - Math.max(0, player.attacking);
+      const swing = elapsed / KNIFE_ANIM;
+      updateKnifePose(swing);
+    } else {
+      updateKnifePose(0);
+    }
+  }
+
+  updateParticles(dt);
+
+  for (let i = zombies.length - 1; i >= 0; i--) {
+    const z = zombies[i];
+    if (z.alive) continue;
+    z.dying += dt;
+    z.group.rotation.x = Math.min(Math.PI / 2, z.dying * 4.5);
+    if (z.dying > 2.2) {
+      scene.remove(z.group);
+      z.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+      zombies.splice(i, 1);
+    }
+  }
+
+  if (currentBoss && currentBoss.alive) {
+    el.bossBar.style.display = 'block';
+    el.bossFill.style.width = Math.max(0, currentBoss.hp / currentBoss.maxHp * 100) + '%';
+  } else {
+    el.bossBar.style.display = 'none';
+  }
+
+  if (state !== 'playing') return;
+
+  if (reloading) {
+    reloadTimer -= dt;
+    if (reloadTimer <= 0) {
+      reloading = false;
+      ammo = MAG_SIZE;
+      el.reloadTip.classList.remove('on');
+      updateHUD();
+    }
+  }
+
+  if (firing && !reloading && player.weapon === 'pistol' && fireCooldown <= 0) {
+    shoot();
+  }
+  if (firing && player.weapon === 'knife' && player.knifeCd <= 0) {
+    knifeAttack();
+  }
+
+  if (jumpBuffer > 0) {
+    jumpBuffer -= dt;
+    if (player.onGround) {
+      player.vy = PLAYER_JUMP_V;
+      player.onGround = false;
+      jumpBuffer = 0;
+      sfxJump();
+      spawnParticles(
+        new THREE.Vector3(player.x, 0.06, player.z),
+        0xbfe0ff, 6, 2
+      );
+    }
+  }
+
+  if (!player.onGround) {
+    player.vy -= PLAYER_GRAV * dt;
+    player.y += player.vy * dt;
+    if (player.y <= 0) {
+      player.y = 0;
+      player.vy = 0;
+      player.onGround = true;
+      sfxLand();
+    }
+  }
+
+  if (player.dodging > 0) {
+    player.dodging -= dt;
+    const step = DODGE_SPEED * dt;
+    const nx = player.x + player.dodgeDirX * step;
+    const nz = player.z + player.dodgeDirZ * step;
+    if (!blocked(nx, player.z)) player.x = nx;
+    if (!blocked(player.x, nz)) player.z = nz;
+    if (Math.random() < 0.6) {
+      spawnParticles(
+        new THREE.Vector3(player.x, 0.4 + Math.random() * 0.8, player.z),
+        0x8faaff, 1, 1
+      );
+    }
+  }
+
+  let ix = 0, iz = 0;
+  if (player.dodging <= 0) {
+    if (keys.w) iz += 1;
+    if (keys.s) iz -= 1;
+    if (keys.a) ix -= 1;
+    if (keys.d) ix += 1;
+  }
+
+  const moving = (ix !== 0 || iz !== 0);
+
+  if (moving) {
+    const len = Math.hypot(ix, iz);
+    ix /= len; iz /= len;
+
+    const sin = Math.sin(player.yaw);
+    const cos = Math.cos(player.yaw);
+
+    const fx = -sin, fz = -cos;
+    const rx =  cos, rz = -sin;
+
+    const mvx = (fx * iz + rx * ix) * MOVE_SPEED * dt;
+    const mvz = (fz * iz + rz * ix) * MOVE_SPEED * dt;
+
+    if (!blocked(player.x + mvx, player.z)) player.x += mvx;
+    if (!blocked(player.x, player.z + mvz)) player.z += mvz;
+  }
+
+  const bobAmp = (moving && player.onGround) ? 0.028 : 0;
+  walkBob += dt * (moving ? 9 : 0);
+  camera.position.set(
+    player.x,
+    PLAYER_HEIGHT + player.y + Math.sin(walkBob) * bobAmp,
+    player.z
+  );
+  camera.rotation.x = player.pitch + player.recoil;
+  camera.rotation.y = player.yaw;
+  camera.rotation.z = 0;
+
+  /* =========================================================
+     ★ 殭屍 AI（已加入障礙物碰撞 + 視線判定）
+  ========================================================= */
+  for (let i = 0; i < zombies.length; i++) {
+    const z = zombies[i];
+    if (!z.alive) continue;
+
+    if (z.hitFlash > 0) {
+      z.hitFlash -= dt;
+      const on = z.hitFlash > 0;
+      for (const m of z.mats) m.emissive.setHex(on ? 0x8a1c1c : 0x000000);
+    }
+
+    const dx = player.x - z.group.position.x;
+    const dz = player.z - z.group.position.z;
+    const dist = Math.hypot(dx, dz);
+
+    z.group.rotation.y = Math.atan2(dx, dz);
+
+    const atkRange = z.isBoss ? ZOMBIE_ATK_RANGE * 1.45 : ZOMBIE_ATK_RANGE;
+
+    // 只有距離接近時才做視線判定（節省效能）
+    let hasSight = true;
+    if (dist < atkRange * 2.5) {
+      hasSight = hasClearLine(
+        z.group.position.x, z.group.position.z,
+        player.x, player.z
+      );
+    }
+
+    // 距離遠，或視線被牆擋住 → 持續移動尋找路徑
+    if (dist > atkRange || !hasSight) {
+      const step = z.speed * dt;
+      const safeDist = dist > 0.001 ? dist : 1;
+      const dirX = dx / safeDist;
+      const dirZ = dz / safeDist;
+
+      const nx = z.group.position.x + dirX * step;
+      const nz = z.group.position.z + dirZ * step;
+
+      let movedX = false, movedZ = false;
+
+      // 軸分離：能走 X 走 X，能走 Z 走 Z（會沿牆滑行）
+      if (!zombieBlocked(nx, z.group.position.z, z.radius)) {
+        z.group.position.x = nx;
+        movedX = true;
+      }
+      if (!zombieBlocked(z.group.position.x, nz, z.radius)) {
+        z.group.position.z = nz;
+        movedZ = true;
+      }
+
+      // 完全卡住 → 沿牆切線繞行
+      if (!movedX && !movedZ) {
+        if (z.avoidDir === 0) {
+          z.avoidDir = Math.random() < 0.5 ? 1 : -1;
+          z.avoidTimer = 0;
+        }
+        const perpX = -dirZ * z.avoidDir;
+        const perpZ =  dirX * z.avoidDir;
+        const sx = perpX * step;
+        const sz = perpZ * step;
+
+        if (!zombieBlocked(z.group.position.x + sx, z.group.position.z, z.radius)) {
+          z.group.position.x += sx;
+          movedX = true;
+        }
+        if (!zombieBlocked(z.group.position.x, z.group.position.z + sz, z.radius)) {
+          z.group.position.z += sz;
+          movedZ = true;
+        }
+
+        z.avoidTimer += dt;
+        if (z.avoidTimer > 1.2) {
+          z.avoidDir = -z.avoidDir;
+          z.avoidTimer = 0;
+        }
+      } else {
+        z.avoidDir = 0;
+        z.avoidTimer = 0;
+      }
+
+      // 只有真的移動了才播放走路動畫
+      if (movedX || movedZ) {
+        z.walkPhase += dt * (4.5 + z.speed);
+        const sw = Math.sin(z.walkPhase) * 0.55;
+        z.parts.legL.rotation.x =  sw;
+        z.parts.legR.rotation.x = -sw;
+        z.parts.torso.position.y = 1.06 + Math.abs(Math.sin(z.walkPhase * 2)) * 0.035;
+        z.parts.head.position.y  = 1.72 + Math.abs(Math.sin(z.walkPhase * 2)) * 0.035;
+        z.parts.armL.rotation.x = Math.sin(z.walkPhase * 1.4) * 0.14;
+        z.parts.armR.rotation.x = -Math.sin(z.walkPhase * 1.4) * 0.14;
+      }
+    } else {
+      // 距離足夠近，且視線暢通 → 攻擊
+      z.atkCd -= dt;
+      if (z.atkCd <= 0) {
+        z.atkCd = z.isBoss ? 1.1 : 0.95;
+        if (player.y < 0.55) {
+          const dmg = z.isBoss ? ZOMBIE_ATK_DMG * 2 : ZOMBIE_ATK_DMG;
+          damagePlayer(dmg);
+        }
+        z.parts.armL.rotation.x = -1.1;
+        z.parts.armR.rotation.x = -1.1;
+      }
+      z.parts.armL.rotation.x += (0 - z.parts.armL.rotation.x) * Math.min(1, dt * 6);
+      z.parts.armR.rotation.x += (0 - z.parts.armR.rotation.x) * Math.min(1, dt * 6);
+    }
+  }
+
+  if (bossSpawnTimer > 0) {
+    bossSpawnTimer -= dt;
+    if (bossSpawnTimer <= 0) {
+      bossSpawnTimer = -1;
+      spawnBoss();
+    }
+  }
+
+  if (waveActive) {
+    if (zombiesToSpawn > 0) {
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) {
+        spawnZombie();
+        zombiesToSpawn--;
+        spawnTimer = Math.max(0.28, 0.8 - wave * 0.03);
+        updateHUD();
+      }
+    } else {
+      let alive = 0;
+      for (let i = 0; i < zombies.length; i++) if (zombies[i].alive) alive++;
+      if (alive === 0 && bossSpawnTimer < 0) {
+        waveActive = false;
+        waveBreakTimer = 3.0;
+        score += 250;
+        showBanner('第 ' + wave + ' 波 清空！', 2000, false);
+
+        ammo = MAG_SIZE;
+        reloading = false;
+        el.reloadTip.classList.remove('on');
+        updateHUD();
+      }
+    }
+  } else if (waveBreakTimer > 0) {
+    waveBreakTimer -= dt;
+    if (waveBreakTimer <= 0) startWave(wave + 1);
+  }
+}
+
+/* =========================================================
+   渲染迴圈
+========================================================= */
+let loopErrorLogged = false;
+
+function loop() {
+  requestAnimationFrame(loop);
+  try {
+    let dt = clock.getDelta();
+    if (dt > 0.05) dt = 0.05;
+
+    update(dt);
+    renderer.render(scene, camera);
+  } catch (err) {
+    if (!loopErrorLogged) {
+      console.error('[loop 錯誤]', err);
+      loopErrorLogged = true;
+    }
+  }
+}
+
+/* =========================================================
+   初始化
+========================================================= */
+camera.position.set(0, PLAYER_HEIGHT, 0);
+updateHUD();
+updateFullscreenIcon();
+loop();
+</script>
+</body>
+</html>
